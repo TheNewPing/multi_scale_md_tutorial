@@ -1,0 +1,19 @@
+# Lattice parameter a0 and cohesive energy Ecoh of fcc Ni at zero pressure.
+# in : potential_file, data_file (NCELL^3 fcc supercell), ncell, out_file
+# out: variables a0 [Å] and Ecoh [eV/atom]; the relaxed cell is written to out_file
+
+variable        potential_file index potential.mod
+variable        data_file      index work/a0.data
+variable        ncell          index 4
+variable        out_file       index work/a0_out.data
+
+units           metal
+atom_style      atomic
+boundary        p p p
+read_data       ${data_file}
+include         ${potential_file}
+fix             1 all box/relax iso 0.0 vmax 0.001
+minimize        0 1e-12 5000 50000
+variable        a0   equal lx/${ncell}
+variable        Ecoh equal pe/atoms
+write_data      ${out_file}

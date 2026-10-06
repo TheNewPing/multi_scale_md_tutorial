@@ -1,0 +1,47 @@
+# Cubic elastic constants C11, C12, C44 from central differences of the stress (Hooke's law).
+# in : potential_file, data_file (fcc supercell at the relaxed a0)
+# out: variables C11, C12, C44 [GPa]
+# Every strained box is set from the unstrained box (xlo0, lx0, ly0), so each change_box line
+# states the strain it applies.
+
+variable        potential_file index potential.mod
+variable        data_file      index work/elastic.data
+
+units           metal
+atom_style      atomic
+boundary        p p p
+read_data       ${data_file}
+change_box      all triclinic
+include         ${potential_file}
+
+variable        e    equal 1.0e-4
+variable        xlo0 equal $(xlo)
+variable        lx0  equal $(lx)
+variable        ly0  equal $(ly)
+
+# normal strain exx = +e and -e  ->  C11 (from pxx) and C12 (from pyy)
+change_box      all x final ${xlo0} $(v_xlo0 + (1.0 + v_e)*v_lx0) remap units box
+run             0
+variable        pxx_p equal $(pxx)
+variable        pyy_p equal $(pyy)
+
+change_box      all x final ${xlo0} $(v_xlo0 + (1.0 - v_e)*v_lx0) remap units box
+run             0
+variable        pxx_m equal $(pxx)
+variable        pyy_m equal $(pyy)
+
+change_box      all x final ${xlo0} $(v_xlo0 + v_lx0) remap units box        # back to the unstrained box
+
+# shear strain gxy = +e and -e  ->  C44 (from pxy)
+change_box      all xy final $(v_e*v_ly0) remap units box
+run             0
+variable        pxy_p equal $(pxy)
+
+change_box      all xy final $(-v_e*v_ly0) remap units box
+run             0
+variable        pxy_m equal $(pxy)
+
+# C = d(stress)/d(strain); stress = -pressure; 1 GPa = 1e4 bar
+variable        C11 equal $(-(v_pxx_p - v_pxx_m)/(2*v_e)/1e4)
+variable        C12 equal $(-(v_pyy_p - v_pyy_m)/(2*v_e)/1e4)
+variable        C44 equal $(-(v_pxy_p - v_pxy_m)/(2*v_e)/1e4)

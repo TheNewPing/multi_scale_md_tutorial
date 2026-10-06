@@ -1,1 +1,10 @@
 fe_bcc/
+
+# local Python environment (see requirements.txt)
+.venv/
+.uv/
+
+# files written when the notebook runs
+work/
+potential.mod
+results_*.json

@@ -1,0 +1,8 @@
+# Packages used by ni_dislocation_benchmark.ipynb (same pins as its install cell)
+lammps[mpi]==2025.7.22.4.0
+atomman==1.5.4
+ase==3.29.0
+ovito==3.16.1
+# Running the notebook locally (Colab already has these): Jupyter kernel, and ipywidgets for OVITO's interactive viewer
+ipykernel==7.1.0
+ipywidgets==8.1.8
