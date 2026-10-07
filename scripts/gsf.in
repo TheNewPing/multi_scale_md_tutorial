@@ -1,0 +1,19 @@
+# Energy of one (111) slab with a stacking-fault shift, relaxed normal to the fault only.
+# The notebook (Section 5) builds the slab and applies the shift with atomman; this script only relaxes it.
+# in : potential_file, data_file (shifted slab, fault plane normal to z), out_file
+# out: variable E_total [eV]; the relaxed slab is written to out_file
+
+variable        potential_file index potential.mod
+variable        data_file      index work/gsf.data
+variable        out_file       index work/gsf_out.data
+
+units           metal
+atom_style      atomic
+boundary        p p s                                # periodic in the fault plane, free surfaces along z
+read_data       ${data_file}
+include         ${potential_file}
+
+fix             normal all setforce 0.0 0.0 NULL     # atoms move only along the fault normal z
+minimize        0.0 1.0e-6 2000 20000
+variable        E_total equal $(pe)
+write_data      ${out_file}
