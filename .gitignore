@@ -8,3 +8,4 @@ fe_bcc/
 work/
 potential.mod
 results_*.json
+log.lammps
