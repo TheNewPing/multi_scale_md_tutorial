@@ -1,0 +1,40 @@
+# Lattice parameter and cohesive energy: general version of a0.in (same contract, so it can replace it directly).
+# Adapted from PAD_CRSS_Ni_example/basic_properties/cohesive_energy_lattice_constant/Ecoh_and_Latparam.in
+# (F. Brunner), which is based on M. Tschopp's 2010 cohesive-energy script.
+#
+# in : potential_file, data_file (cubic supercell), out_file
+# out: variables lx [A] (mean relaxed box length (lx+ly+lz)/3), Ecoh [eV/atom] (= pe/atoms, negative, as in a0.in;
+#      Brunner's script reports the positive -pe/atoms); the relaxed cell is written to out_file
+#
+# Compared with a0.in this script
+#   1. relaxes the three box lengths independently (fix box/relax aniso instead of iso), so a potential that
+#      prefers a non-cubic (e.g. tetragonal) cell shows up as lx != ly != lz instead of being hidden;
+#   2. uses much tighter tolerances (it effectively runs until the line search can make no more progress);
+#   3. repeats the box relaxation once: box/relax measures strain against the box at the time the fix is defined,
+#      so a second pass that starts from the relaxed box removes the small residual pressure left by the first.
+
+variable        potential_file index potential.mod
+variable        data_file      index work/a0.data
+variable        out_file       index work/a0_out.data
+
+units           metal
+atom_style      atomic
+boundary        p p p
+read_data       ${data_file}
+include         ${potential_file}
+neigh_modify    delay 0 every 1 check yes
+min_style       cg
+thermo_style    custom step pe lx ly lz press pxx pyy pzz pxy pxz pyz fnorm
+
+fix             1 all box/relax aniso 0.0 vmax 0.001
+minimize        1e-25 1e-25 10000 100000
+unfix           1
+fix             1 all box/relax aniso 0.0 vmax 0.001     # second pass, reference box = relaxed box
+minimize        1e-25 1e-25 10000 100000
+unfix           1
+
+variable        lx   equal (lx+ly+lz)/3
+variable        Ecoh equal pe/atoms
+print           "relaxed box lengths: lx = $(lx:%.6f)  ly = $(ly:%.6f)  lz = $(lz:%.6f) A"
+print           "residual pressure = $(press:%.3e) bar   Ecoh = $(v_Ecoh:%.6f) eV/atom"
+write_data      ${out_file}

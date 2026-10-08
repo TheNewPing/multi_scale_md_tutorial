@@ -1,0 +1,152 @@
+# Elastic constants: general version of elastic.in (same contract, so it can replace it directly).
+# Adapted from PAD_CRSS_Ni_example/basic_properties/elastic_constants/elastic_const.in (F. Brunner),
+# which is based on the LAMMPS example examples/ELASTIC (A. Thompson, Sandia).
+#
+# in : potential_file, data_file (any periodic cell)
+#      optional: up (strain amplitude, default 1e-5), restart_file (scratch file, deleted at the end)
+# out: variables C11, C12, C44 [GPa] (cubic averages, as in elastic.in)
+#      plus the full symmetrised 6x6 matrix C11all ... C66all [GPa], printed to the log
+#
+# Compared with elastic.in this script
+#   1. relaxes the box to zero stress before straining (fix box/relax aniso), so a slightly wrong a0 does not bias C;
+#   2. applies all 6 Voigt strains (+up and -up) instead of 2, giving the full 6x6 matrix;
+#   3. relaxes the atoms in every strained box (internal relaxation), needed for non-Bravais
+#      lattices (hcp, diamond) and for cells with defects or solutes.
+# The cubic averages are only meaningful if the box axes are the cube axes <100>: check the printed matrix
+# (C11all = C22all = C33all, C12all = C13all = C23all, C44all = C55all = C66all, all other entries ~ 0).
+
+variable        potential_file index potential.mod
+variable        data_file      index work/elastic.data
+variable        restart_file   index work/elastic_full.restart
+variable        up             index 1.0e-5       # strain amplitude; results should not depend on it
+variable        atomjiggle     equal 1.0e-5       # random displacement [A]; keeps atoms off saddle points
+variable        cfac           equal 1.0e-4       # bar -> GPa
+
+# minimization: etol, ftol, maxiter, maxeval
+variable        etol    equal 0.0
+variable        ftol    equal 1.0e-10
+variable        maxiter equal 10000
+variable        maxeval equal 100000
+
+# ---------------------------------------------------------------- reference state
+units           metal
+atom_style      atomic
+boundary        p p p
+read_data       ${data_file}
+change_box      all triclinic
+include         ${potential_file}
+neigh_modify    delay 0 every 1 check yes
+min_style       cg
+min_modify      dmax 1.0e-2 line quadratic
+thermo_style    custom step pe press pxx pyy pzz pyz pxz pxy lx ly lz fmax
+
+run             0
+print           "residual pressure of the input cell: $(press) bar"
+
+fix             3 all box/relax aniso 0.0
+minimize        ${etol} ${ftol} ${maxiter} ${maxeval}
+unfix           3
+print           "residual pressure after box relaxation: $(press) bar"
+
+variable        lx0 equal $(lx)
+variable        ly0 equal $(ly)
+variable        lz0 equal $(lz)
+
+displace_atoms  all random ${atomjiggle} ${atomjiggle} ${atomjiggle} 87287 units box
+write_restart   ${restart_file}
+
+# ---------------------------------------------------------------- loop over the 6 Voigt strains
+# dir = 1..6 = xx, yy, zz, yz, xz, xy. Each strain is applied as -up and +up to the reference state and
+# column dir of C is the central difference  C(i,dir) = -(p_i(+up) - p_i(-up)) / (2 up)   (stress = -pressure)
+label           loop_dir
+variable        dir loop 6
+
+if "${dir} == 1" then "variable len0 equal ${lx0}"
+if "${dir} == 2" then "variable len0 equal ${ly0}"
+if "${dir} == 3" then "variable len0 equal ${lz0}"
+if "${dir} == 4" then "variable len0 equal ${lz0}"
+if "${dir} == 5" then "variable len0 equal ${lz0}"
+if "${dir} == 6" then "variable len0 equal ${ly0}"
+
+variable        sign index -1 1
+label           loop_sign
+    clear
+    read_restart    ${restart_file}
+    include         ${potential_file}
+    neigh_modify    delay 0 every 1 check yes
+    min_style       cg
+    min_modify      dmax 1.0e-2 line quadratic
+    thermo_style    custom step pe press pxx pyy pzz pyz pxz pxy lx ly lz fmax
+
+    # a normal strain also scales the tilt factors, so the strain is homogeneous in a triclinic box
+    variable        delta   equal ${sign}*${up}*${len0}
+    variable        deltaxy equal ${sign}*${up}*xy
+    variable        deltaxz equal ${sign}*${up}*xz
+    variable        deltayz equal ${sign}*${up}*yz
+    if "${dir} == 1" then "change_box all x delta 0 ${delta} xy delta ${deltaxy} xz delta ${deltaxz} remap units box"
+    if "${dir} == 2" then "change_box all y delta 0 ${delta} yz delta ${deltayz} remap units box"
+    if "${dir} == 3" then "change_box all z delta 0 ${delta} remap units box"
+    if "${dir} == 4" then "change_box all yz delta ${delta} remap units box"
+    if "${dir} == 5" then "change_box all xz delta ${delta} remap units box"
+    if "${dir} == 6" then "change_box all xy delta ${delta} remap units box"
+
+    minimize        ${etol} ${ftol} ${maxiter} ${maxeval}      # internal relaxation
+    print           "dir ${dir} strain ${sign}*${up}: fmax after relaxation = $(fmax) eV/A"
+
+    if "${sign} == -1" then &
+       "variable pxx_neg equal $(pxx)" "variable pyy_neg equal $(pyy)" "variable pzz_neg equal $(pzz)" &
+       "variable pyz_neg equal $(pyz)" "variable pxz_neg equal $(pxz)" "variable pxy_neg equal $(pxy)" &
+    else &
+       "variable pxx_pos equal $(pxx)" "variable pyy_pos equal $(pyy)" "variable pzz_pos equal $(pzz)" &
+       "variable pyz_pos equal $(pyz)" "variable pxz_pos equal $(pxz)" "variable pxy_pos equal $(pxy)"
+next            sign
+jump            SELF loop_sign
+
+variable        c1_${dir} equal $(-(v_pxx_pos - v_pxx_neg)/(2*v_up)*v_cfac)
+variable        c2_${dir} equal $(-(v_pyy_pos - v_pyy_neg)/(2*v_up)*v_cfac)
+variable        c3_${dir} equal $(-(v_pzz_pos - v_pzz_neg)/(2*v_up)*v_cfac)
+variable        c4_${dir} equal $(-(v_pyz_pos - v_pyz_neg)/(2*v_up)*v_cfac)
+variable        c5_${dir} equal $(-(v_pxz_pos - v_pxz_neg)/(2*v_up)*v_cfac)
+variable        c6_${dir} equal $(-(v_pxy_pos - v_pxy_neg)/(2*v_up)*v_cfac)
+variable        sign delete
+next            dir
+jump            SELF loop_dir
+variable        dir delete
+
+# ---------------------------------------------------------------- symmetrised 6x6 matrix and cubic averages
+variable        C11all equal ${c1_1}
+variable        C22all equal ${c2_2}
+variable        C33all equal ${c3_3}
+variable        C44all equal ${c4_4}
+variable        C55all equal ${c5_5}
+variable        C66all equal ${c6_6}
+variable        C12all equal 0.5*(${c1_2}+${c2_1})
+variable        C13all equal 0.5*(${c1_3}+${c3_1})
+variable        C14all equal 0.5*(${c1_4}+${c4_1})
+variable        C15all equal 0.5*(${c1_5}+${c5_1})
+variable        C16all equal 0.5*(${c1_6}+${c6_1})
+variable        C23all equal 0.5*(${c2_3}+${c3_2})
+variable        C24all equal 0.5*(${c2_4}+${c4_2})
+variable        C25all equal 0.5*(${c2_5}+${c5_2})
+variable        C26all equal 0.5*(${c2_6}+${c6_2})
+variable        C34all equal 0.5*(${c3_4}+${c4_3})
+variable        C35all equal 0.5*(${c3_5}+${c5_3})
+variable        C36all equal 0.5*(${c3_6}+${c6_3})
+variable        C45all equal 0.5*(${c4_5}+${c5_4})
+variable        C46all equal 0.5*(${c4_6}+${c6_4})
+variable        C56all equal 0.5*(${c5_6}+${c6_5})
+
+variable        C11 equal $((v_C11all + v_C22all + v_C33all)/3)
+variable        C12 equal $((v_C12all + v_C13all + v_C23all)/3)
+variable        C44 equal $((v_C44all + v_C55all + v_C66all)/3)
+
+print           "elastic constant matrix [GPa]"
+print           "$(v_C11all:%9.2f) $(v_C12all:%9.2f) $(v_C13all:%9.2f) $(v_C14all:%9.2f) $(v_C15all:%9.2f) $(v_C16all:%9.2f)"
+print           "$(v_C12all:%9.2f) $(v_C22all:%9.2f) $(v_C23all:%9.2f) $(v_C24all:%9.2f) $(v_C25all:%9.2f) $(v_C26all:%9.2f)"
+print           "$(v_C13all:%9.2f) $(v_C23all:%9.2f) $(v_C33all:%9.2f) $(v_C34all:%9.2f) $(v_C35all:%9.2f) $(v_C36all:%9.2f)"
+print           "$(v_C14all:%9.2f) $(v_C24all:%9.2f) $(v_C34all:%9.2f) $(v_C44all:%9.2f) $(v_C45all:%9.2f) $(v_C46all:%9.2f)"
+print           "$(v_C15all:%9.2f) $(v_C25all:%9.2f) $(v_C35all:%9.2f) $(v_C45all:%9.2f) $(v_C55all:%9.2f) $(v_C56all:%9.2f)"
+print           "$(v_C16all:%9.2f) $(v_C26all:%9.2f) $(v_C36all:%9.2f) $(v_C46all:%9.2f) $(v_C56all:%9.2f) $(v_C66all:%9.2f)"
+print           "cubic averages [GPa]: C11 = $(v_C11:%.2f)  C12 = $(v_C12:%.2f)  C44 = $(v_C44:%.2f)"
+
+shell           rm -f ${restart_file}

@@ -1,0 +1,112 @@
+# Critical resolved shear stress (Peierls stress) of the relaxed PAD at 0 K, by stepwise shear.
+# Adapted from PAD_CRSS_Ni_example/CRSS/crss_calc.in (F. Brunner, after L. La Rosa) and La Rosa et al.,
+# Acta Mater. 301, 121561 (2025), App. A.3.
+# The shear stress tau_xy is applied as forces along +x / -x on the atoms of the top / bottom layer (thickness `layer`):
+#   |f| = tau * lx * lz / N_layer                                   (La Rosa et al., eq. A.3)
+# Step i applies tau = tau_start + i*dtau (i = 0 ... n_steps), and the cell is relaxed (CG with box/relax, then FIRE), starting
+# from the previous step. A coarse scan from tau_start = 0 brackets the CRSS; a second, finer scan can then start at the last
+# static stress of the first (the jump from 0 to tau_start is fine as long as the dislocation does not glide at tau_start).
+# Glide is detected from the relative displacement of the two layers along x, `slip`. Elastic shear changes it by ~0.001 A per MPa;
+# one passage of the dislocation through the periodic cell changes it by b. The dislocation is taken to glide when slip has grown
+# by more than `slip_tol` since tau = 0, or when FIRE does not converge within `fire_maxiter` iterations (the cell keeps shearing
+# and the energy keeps falling). Close above the CRSS the dislocation glides slowly, so FIRE usually stops first.
+#
+# in : potential_file, data_file (relaxed PAD from pad.in), table_file, dump_dir, layer [A], tau_start, dtau [MPa], n_steps,
+#      slip_tol [A], fire_maxiter, traj_every, glide_iter
+# out: variables tau_static, tau_glide [MPa]: last stress at which the dislocation does not glide / first at which it glides
+#      (tau_static = tau_start if it glides at step 0); CRSS [MPa]: their mean, as in La Rosa et al. (0 if no glide within n_steps);
+#      slip_end [A]: slip at the end of the script (differs from the last table line only with glide_iter > 0).
+#      Files: one line per step in table_file; the relaxed atoms of every step in dump_dir/step_<i>.dump; with traj_every > 0
+#      also the trajectory of every step (CG and FIRE) in dump_dir/traj_<i>.dump: a frame every traj_every minimizer
+#      iterations, plus the last iteration of each minimization.
+# Optional, e.g. to watch the glide: with glide_iter > 0, once glide is detected FIRE continues for glide_iter more iterations at
+# the glide stress. This does not change tau_static, tau_glide or CRSS. With traj_every > 0 the extra frames are appended to the
+# trajectory of the gliding step, and the iteration counter continues.
+
+variable        potential_file index potential.mod
+variable        data_file      index work/pad_out.data
+variable        table_file     index work/crss.txt
+variable        dump_dir       index work/crss
+variable        layer          index 10.0          # A
+variable        tau_start      index 0.0           # MPa
+variable        dtau           index 0.5           # MPa
+variable        n_steps        index 40
+variable        slip_tol       index 0.5           # A
+variable        fire_maxiter   index 5000          # static steps of the notebook PAD need 50-1500 FIRE iterations
+variable        traj_every     index 0             # minimizer iterations between trajectory frames; 0 = no trajectory
+variable        glide_iter     index 0             # extra FIRE iterations after glide is detected; 0 = stop at once
+
+units           metal
+atom_style      atomic
+boundary        p s p
+read_data       ${data_file}
+change_box      all triclinic
+include         ${potential_file}
+neigh_modify    delay 0 every 1 check yes
+thermo          1000
+thermo_style    custom step pe lx ly lz pxx pyy pzz pxy pxz pyz fnorm
+
+# top and bottom layers, where the shear forces act
+variable        y_top equal yhi-${layer}
+variable        y_bot equal ylo+${layer}
+region          topR block INF INF ${y_top} INF INF INF units box
+region          botR block INF INF INF ${y_bot} INF INF units box
+group           top region topR
+group           bot region botR
+variable        N_top equal $(count(top))
+variable        N_bot equal $(count(bot))
+variable        area  equal $(lx*lz)                # A^2, area of the layers (normal to y)
+variable        MPa_per_eVA3 equal 160217.6565      # 1 eV/A^3 = 160217.66 MPa
+
+variable        slip equal xcm(top,x)-xcm(bot,x)    # uses unwrapped coordinates, so it keeps counting across the periodic boundary
+variable        slip0 equal $(v_slip)
+
+shell           mkdir ${dump_dir}
+print           "# tau [MPa]   slip - slip(0) [A]   FIRE iterations" file ${table_file}
+
+variable        tau_static equal ${tau_start}
+variable        tau_glide  equal 0.0
+variable        i loop 0 ${n_steps}
+label           shear
+    variable        tau equal ${tau_start}+$i*${dtau}
+    variable        f_top equal  ${tau}/${MPa_per_eVA3}*${area}/${N_top}
+    variable        f_bot equal -${tau}/${MPa_per_eVA3}*${area}/${N_bot}
+    fix             f_top top addforce ${f_top} 0.0 0.0
+    fix             f_bot bot addforce ${f_bot} 0.0 0.0
+    fix_modify      f_top energy yes                # the work of the applied forces is part of the minimized energy
+    fix_modify      f_bot energy yes
+
+    reset_timestep  0                               # the step counter counts the minimizer iterations of this step
+    if "${traj_every} > 0" then "dump traj all custom ${traj_every} ${dump_dir}/traj_$i.dump id type x y z" "dump_modify traj sort id"
+    fix             relax all box/relax x 0.0 z 0.0 xz 0.0 vmax 0.001
+    min_style       cg
+    minimize        1e-12 1e-12 10000 10000
+    unfix           relax
+    variable        n_cg equal $(step)
+    min_style       fire
+    minimize        0.0 1e-5 ${fire_maxiter} ${fire_maxiter}
+    variable        n_fire equal $(step-v_n_cg)
+
+    variable        dslip equal $(v_slip-v_slip0)
+    print           "${tau} ${dslip} ${n_fire}" append ${table_file} screen no
+    print           "tau = ${tau} MPa: slip = ${dslip} A, FIRE iterations = ${n_fire}"
+    write_dump      all custom ${dump_dir}/step_$i.dump id type x y z modify sort id
+    if "${traj_every} > 0" then "undump traj"
+    if "$(abs(v_dslip)) > ${slip_tol} || ${n_fire} >= ${fire_maxiter}" then "jump SELF glide"
+    unfix           f_top
+    unfix           f_bot
+    variable        tau_static equal ${tau}
+    next            i
+jump            SELF shear
+
+label           glide
+variable        tau_glide equal ${tau}
+# optional: keep minimizing at the glide stress (the shear forces are still applied)
+if "${glide_iter} > 0 && ${traj_every} > 0" then "dump traj all custom ${traj_every} ${dump_dir}/traj_$i.dump id type x y z" &
+                                                 "dump_modify traj sort id append yes"
+if "${glide_iter} > 0" then "minimize 0.0 1e-5 ${glide_iter} ${glide_iter}"
+variable        slip_end equal $(v_slip-v_slip0)
+print           "end of script: slip = ${slip_end} A"
+
+variable        CRSS equal "(v_tau_glide > 0) * 0.5 * (v_tau_static + v_tau_glide)"
+print           "tau_static = ${tau_static} MPa, tau_glide = ${tau_glide} MPa, CRSS = $(v_CRSS) MPa"

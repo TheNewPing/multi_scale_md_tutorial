@@ -1,0 +1,54 @@
+# Relaxation of a periodic array of dislocations (PAD): periodic along x (glide direction) and z (line), free surfaces along y.
+# The notebook (Section 7) builds the PAD with atomman (linear disregistry 0 -> b across the cell); this script only relaxes it.
+# Relaxation scheme adapted from PAD_CRSS_Ni_example/PAD/create_edge_pad.in (F. Brunner) and La Rosa et al.,
+# Acta Mater. 301, 121561 (2025), App. A.2-A.3: no fixed atoms, CG with the cell relaxed to sigma_xx = sigma_zz = sigma_xz = 0,
+# then FIRE at fixed cell. The cycle is repeated until the stresses are below `tol` at the END of a cycle (after FIRE).
+#
+# in : potential_file, data_file (PAD), out_file, tol [bar], max_cycles, traj_every, traj_file
+# out: variables E_total [eV], n_cycles, pxx_res, pzz_res, pxz_res [bar]; the relaxed cell is written to out_file;
+#      with traj_every > 0, a frame of the relaxation every traj_every minimizer iterations in traj_file
+#      (LAMMPS also writes a frame at the last iteration of every minimization)
+
+variable        potential_file index potential.mod
+variable        data_file      index work/pad.data
+variable        out_file       index work/pad_out.data
+variable        tol            index 20.0          # bar (= 2 MPa); convergence criterion on |pxx|, |pzz|, |pxz|
+variable        max_cycles     index 10
+variable        traj_every     index 0             # minimizer iterations between trajectory frames; 0 = no trajectory
+variable        traj_file      index work/pad_traj.dump
+
+units           metal
+atom_style      atomic
+boundary        p s p                               # free surfaces normal to the slip plane (y)
+read_data       ${data_file}
+change_box      all triclinic                       # the xz tilt is relaxed as well
+include         ${potential_file}
+neigh_modify    delay 0 every 1 check yes
+
+thermo          500
+thermo_style    custom step pe lx ly lz pxx pyy pzz pxy pxz pyz fnorm
+variable        apxx equal abs(pxx)
+variable        apzz equal abs(pzz)
+variable        apxz equal abs(pxz)
+if "${traj_every} > 0" then "dump traj all custom ${traj_every} ${traj_file} id type x y z" "dump_modify traj sort id"
+
+variable        k loop ${max_cycles}
+label           cycle
+    fix             relax all box/relax x 0.0 z 0.0 xz 0.0 vmax 0.001
+    min_style       cg
+    minimize        1e-12 1e-12 10000 10000
+    unfix           relax
+    min_style       fire
+    minimize        0.0 1e-5 20000 20000
+    variable        n_cycles equal $k                  # kept after the loop ends (a loop variable is deleted when exhausted)
+    print           "cycle $k: pxx = $(pxx:%.2f)  pzz = $(pzz:%.2f)  pxz = $(pxz:%.2f) bar   pe = $(pe:%.6f) eV"
+    if "${apxx} < ${tol} && ${apzz} < ${tol} && ${apxz} < ${tol}" then "jump SELF done"
+    next            k
+jump            SELF cycle
+label           done
+
+variable        pxx_res  equal $(pxx)
+variable        pzz_res  equal $(pzz)
+variable        pxz_res  equal $(pxz)
+variable        E_total  equal $(pe)
+write_data      ${out_file}

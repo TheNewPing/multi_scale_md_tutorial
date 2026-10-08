@@ -22,26 +22,26 @@ variable        ly0  equal $(ly)
 # normal strain exx = +e and -e  ->  C11 (from pxx) and C12 (from pyy)
 change_box      all x final ${xlo0} $(v_xlo0 + (1.0 + v_e)*v_lx0) remap units box
 run             0
-variable        pxx_p equal $(pxx)
-variable        pyy_p equal $(pyy)
+variable        pxx_pos equal $(pxx)
+variable        pyy_pos equal $(pyy)
 
 change_box      all x final ${xlo0} $(v_xlo0 + (1.0 - v_e)*v_lx0) remap units box
 run             0
-variable        pxx_m equal $(pxx)
-variable        pyy_m equal $(pyy)
+variable        pxx_neg equal $(pxx)
+variable        pyy_neg equal $(pyy)
 
 change_box      all x final ${xlo0} $(v_xlo0 + v_lx0) remap units box        # back to the unstrained box
 
 # shear strain gxy = +e and -e  ->  C44 (from pxy)
 change_box      all xy final $(v_e*v_ly0) remap units box
 run             0
-variable        pxy_p equal $(pxy)
+variable        pxy_pos equal $(pxy)
 
 change_box      all xy final $(-v_e*v_ly0) remap units box
 run             0
-variable        pxy_m equal $(pxy)
+variable        pxy_neg equal $(pxy)
 
 # C = d(stress)/d(strain); stress = -pressure; 1 GPa = 1e4 bar
-variable        C11 equal $(-(v_pxx_p - v_pxx_m)/(2*v_e)/1e4)
-variable        C12 equal $(-(v_pyy_p - v_pyy_m)/(2*v_e)/1e4)
-variable        C44 equal $(-(v_pxy_p - v_pxy_m)/(2*v_e)/1e4)
+variable        C11 equal $(-(v_pxx_pos - v_pxx_neg)/(2*v_e)/1e4)
+variable        C12 equal $(-(v_pyy_pos - v_pyy_neg)/(2*v_e)/1e4)
+variable        C44 equal $(-(v_pxy_pos - v_pxy_neg)/(2*v_e)/1e4)
