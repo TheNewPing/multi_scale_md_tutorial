@@ -11,7 +11,6 @@ All simulations run with LAMMPS through its Python interface.
 
 The tutorial is meant to run on [Google Colab](https://colab.research.google.com/): click the button above.
 You only need a browser and a Google account.
-the LAMMPS scripts and potential files from this repository.
 
 ## Contents
 

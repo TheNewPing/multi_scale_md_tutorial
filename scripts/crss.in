@@ -25,7 +25,7 @@ variable        layer          index 10.0          # A
 variable        tau_start      index 0.0           # MPa
 variable        dtau           index 0.5           # MPa
 variable        n_steps        index 40
-variable        fire_maxiter   index 5000          # static steps of the notebook PAD need 50-1500 FIRE iterations
+variable        fire_maxiter   index 5000
 variable        traj_every     index 0             # minimizer iterations between trajectory frames; 0 = no trajectory
 variable        glide_iter     index 0             # extra FIRE iterations after glide is detected; 0 = stop at once
 
