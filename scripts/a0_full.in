@@ -1,6 +1,5 @@
 # Lattice parameter and cohesive energy: general version of a0.in (same contract, so it can replace it directly).
-# Adapted from PAD_CRSS_Ni_example/basic_properties/cohesive_energy_lattice_constant/Ecoh_and_Latparam.in
-# (F. Brunner), which is based on M. Tschopp's 2010 cohesive-energy script.
+# Adapted from F. Brunner's script, which is based on M. Tschopp's 2010 cohesive-energy script.
 #
 # in : potential_file, data_file (cubic supercell), out_file
 # out: variables lx [A] (mean relaxed box length (lx+ly+lz)/3), Ecoh [eV/atom] (= pe/atoms, negative, as in a0.in;

@@ -1,6 +1,5 @@
 # Elastic constants: general version of elastic.in (same contract, so it can replace it directly).
-# Adapted from PAD_CRSS_Ni_example/basic_properties/elastic_constants/elastic_const.in (F. Brunner),
-# which is based on the LAMMPS example examples/ELASTIC (A. Thompson, Sandia).
+# Adapted from F. Brunner's script, which is based on the LAMMPS example examples/ELASTIC (A. Thompson, Sandia).
 #
 # in : potential_file, data_file (any periodic cell)
 #      optional: up (strain amplitude, default 1e-5), restart_file (scratch file, deleted at the end)

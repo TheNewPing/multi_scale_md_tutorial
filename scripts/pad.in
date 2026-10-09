@@ -1,8 +1,8 @@
 # Relaxation of a periodic array of dislocations (PAD): periodic along x (glide direction) and z (line), free surfaces along y.
 # The notebook (Section 7) builds the PAD with atomman (linear disregistry 0 -> b across the cell); this script only relaxes it.
-# Relaxation scheme adapted from PAD_CRSS_Ni_example/PAD/create_edge_pad.in (F. Brunner) and La Rosa et al.,
-# Acta Mater. 301, 121561 (2025), App. A.2-A.3: no fixed atoms, CG with the cell relaxed to sigma_xx = sigma_zz = sigma_xz = 0,
-# then FIRE at fixed cell. The cycle is repeated until the stresses are below `tol` at the END of a cycle (after FIRE).
+# Relaxation scheme adapted from F. Brunner's script and La Rosa et al. Acta Mater. 301, 121561 (2025), App. A.2-A.3: no fixed atoms,
+# CG with the cell relaxed to sigma_xx = sigma_zz = sigma_xz = 0, then FIRE at fixed cell.
+# The cycle is repeated until the stresses are below `tol` at the END of a cycle (after FIRE).
 #
 # in : potential_file, data_file (PAD), out_file, tol [bar], max_cycles, traj_every, traj_file
 # out: variables E_total [eV], n_cycles, pxx_res, pzz_res, pxz_res [bar]; the relaxed cell is written to out_file;
